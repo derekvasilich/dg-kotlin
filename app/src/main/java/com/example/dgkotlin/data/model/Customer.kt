@@ -21,8 +21,8 @@ class Customer {
     var lat: Float? = null
     var lng: Float? = null
 
-    val name: String?
-        get() = if (legalName != null && legalName !== "") {
-            legalName
+    val name: String
+        get() = if (legalName != null && legalName != "") {
+            "$legalName"
         } else "$firstName $lastName"
 }

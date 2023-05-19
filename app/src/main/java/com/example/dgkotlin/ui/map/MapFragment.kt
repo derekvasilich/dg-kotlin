@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -16,6 +18,7 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.Navigation.findNavController
 import com.example.dgkotlin.BuildConfig
+import com.example.dgkotlin.BuildConfig.USER_ID_PREF_KEY
 import com.example.dgkotlin.R
 import com.example.dgkotlin.data.model.Contact
 import com.example.dgkotlin.data.model.Customer
@@ -35,8 +38,8 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import java.util.function.Consumer
 import java.util.stream.Collectors
-
 
 class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.OnMarkerClickListener, View.OnClickListener  {
 
@@ -55,10 +58,9 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
     private var _binding: FragmentMapBinding? = null
 
     private val quoteList: MutableList<Quote> = ArrayList()
-    private val visited: MutableMap<Long, Boolean> = HashMap()
     private val markerMap: MutableMap<Long, Marker> = HashMap()
 
-    private val currentQuote: Quote? = null
+    private var currentQuote: Quote? = null
     private var selectedQuote: Quote? = null
     private lateinit var viewJobButton: Button
 
@@ -120,8 +122,7 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
         val settingsClient = LocationServices.getSettingsClient(requireContext())
         settingsClient.checkLocationSettings(locationSettingsRequest)
 
-        // TODO update location service
-//        LocationServices.getFusedLocationProviderClient(requireContext()).requestLocationUpdates(locationRequest, this, Looper.myLooper())
+        LocationServices.getFusedLocationProviderClient(requireContext()).requestLocationUpdates(locationRequest, this, Looper.myLooper())
 
         _mapViewModel.route.observe( viewLifecycleOwner, Observer {
             val route  = it ?: return@Observer
@@ -138,17 +139,44 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
         } else {
             _mapViewModel.fetchCustomers()
         }
+
+        _mapViewModel.visited.observe(viewLifecycleOwner, Observer {
+            val visited = it ?: return@Observer
+            drawVisitedQuotes(visited)
+        })
+    }
+
+    private fun drawVisitedQuotes(visited: List<Long>) {
+        visited.stream().forEach { quoteId ->
+            val quote = quoteList.stream().filter { (id): Quote -> id === quoteId }.findFirst().orElse(null)
+            if (quote != null) {
+                val quoteMarker = markerMap[quoteId]
+                if (quoteMarker != null) {
+                    val visitedMarker = MarkerOptions()
+                        .position(quoteMarker.position)
+                        .title(quote.customer!!.name)
+                        .snippet(quote.contact!!.address)
+                        .icon(BitmapDescriptorFactory.defaultMarker(ICON_VISITED))
+                    quoteMarker.remove()
+                    val marker: Marker? = googleMap.addMarker(visitedMarker)
+                    if (marker != null) {
+                        marker.tag = quote.id
+                        markerMap[quote.id!!] = marker
+                    }
+                }
+            }
+        }
     }
 
     private fun drawRoute(route: Route) {
         val startPoint: Route.StartPoint = Route.startPointList[route.startAddress!!]
         val startLatLng = LatLng(startPoint.lat, startPoint.lng)
-        val startMarker = MarkerOptions()
+        val startMarkerOpts = MarkerOptions()
             .position(startLatLng)
             .title(startPoint.address)
             .icon(BitmapDescriptorFactory.defaultMarker(ICON_START))
-        val marker = googleMap.addMarker(startMarker)
-        if (marker != null) markerMap[0L] = marker
+        val startMarker = googleMap.addMarker(startMarkerOpts)
+        if (startMarker != null) markerMap[0L] = startMarker
         val bounds = LatLngBounds.Builder()
         bounds.include(startLatLng)
         if (route.quotes!!.isNotEmpty()) {
@@ -156,16 +184,16 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
                 val contact: Contact = quote.contact!!
                 val customer: Customer = quote.customer!!
                 if (contact.lat != null && contact.lng != null) {
-                    val point = LatLng(contact.lat!!.toDouble(), contact.lng!!.toDouble())
-                    val quoteMarker = MarkerOptions()
+                    val point = LatLng(contact.lat!!, contact.lng!!)
+                    val quoteMarkerOpts = MarkerOptions()
                         .position(point)
                         .title(customer.name)
                         .snippet(contact.address)
                         .icon(BitmapDescriptorFactory.defaultMarker(ICON_LOCATION))
-                    val marker: Marker? = googleMap.addMarker(quoteMarker)
-                    if (marker != null) {
-                        marker.tag = quote.id
-                        markerMap[quote.id!!] = marker
+                    val quoteMarker = googleMap.addMarker(quoteMarkerOpts)
+                    if (quoteMarker != null) {
+                        quoteMarker.tag = quote.id
+                        markerMap[quote.id!!] = quoteMarker
                     }
                     bounds.include(point)
                     quoteList.add(quote)
@@ -185,7 +213,7 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
                     googleMap.addMarker(
                         MarkerOptions()
                             .position(point)
-                            .title(customer.firstName + ' ' + customer.lastName)
+                            .title(customer.name)
                     )
                 }
             }
@@ -195,7 +223,7 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
     @SuppressLint("SetTextI18n")
     private fun updateQuoteControls() {
         if (currentQuote != null || selectedQuote != null) {
-            var jobId = if (selectedQuote != null) selectedQuote!!.id else currentQuote?.id
+            val jobId = if (selectedQuote != null) selectedQuote!!.id else currentQuote?.id
             viewJobButton.text = "View Job $jobId"
             viewJobButton.visibility = View.VISIBLE
         } else {
@@ -203,7 +231,7 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
         }
     }
 
-    fun intersectingQuotes(center: Location): List<Quote>? {
+    private fun intersectingQuotes(center: Location): List<Quote>? {
         return quoteList.stream().filter { quote ->
             val results = FloatArray(1)
             Location.distanceBetween(
@@ -218,11 +246,32 @@ class MapFragment : Fragment(), OnMapReadyCallback, LocationListener, GoogleMap.
     }
 
     override fun onLocationChanged(location: Location) {
-        TODO("Not yet implemented")
+        val intersections = intersectingQuotes(location)
+        intersections!!.forEach(Consumer { quote: Quote ->
+            currentQuote = quote
+            if (_mapViewModel.visited.value?.contains(quote.id) != true) {
+                Toast.makeText(
+                    context,
+                    "Arrived at: " + quote.contact!!.address,
+                    Toast.LENGTH_SHORT
+                ).show()
+                val prefs = requireActivity().getSharedPreferences(
+                    BuildConfig.APPLICATION_ID,
+                    Context.MODE_PRIVATE
+                )
+                val routeId = prefs.getLong("routeId", -1)
+                val userId = prefs.getLong(USER_ID_PREF_KEY, 0)
+                _mapViewModel.saveRouteLocationVisit(userId, routeId!!, quote.id!!)
+            }
+        })
+        if (intersections.isNotEmpty()) {
+            currentQuote = null
+        }
+        updateQuoteControls()
     }
 
     override fun onMarkerClick(marker: Marker): Boolean {
-        val quoteId = marker!!.tag as Long?
+        val quoteId = marker.tag as Long?
         if (quoteId != null) {
             selectedQuote = quoteList.stream().filter { (id): Quote -> id === quoteId }.findFirst().orElse(null)
             updateQuoteControls()

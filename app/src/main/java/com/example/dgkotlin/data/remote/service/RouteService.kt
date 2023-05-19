@@ -2,9 +2,8 @@ package com.example.dgkotlin.data.remote.service
 
 import com.example.dgkotlin.data.model.PagedList
 import com.example.dgkotlin.data.model.Route
+import com.example.dgkotlin.data.model.Visit
 import io.reactivex.Observable
-
-import okhttp3.ResponseBody
 
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -36,6 +35,6 @@ public interface RouteService {
 
     @POST("routes/visit")
     fun saveRouteLocationVisit(
-        @Body body: HashMap<String, Any>
-    ): Observable<ResponseBody>
+        @Body body: Visit
+    ): Observable<Visit>
 }
