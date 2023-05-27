@@ -1,0 +1,44 @@
+image: gradle:8.1-jdk17-alpine
+
+stages:
+  - build
+  - deploy
+
+variables:
+  GRADLE_OPTS:
+  GRADLE_CLI_OPTS:
+
+cache:
+  key:
+    files:
+      - build.gradle
+      - app/build.gradle
+      - settings.gradle
+      - gradle.properties
+  paths:
+    - gradle
+
+java-build-and-test:
+  stage: build
+  variables:
+    APP_MAPS_API_KEY: $APP_MAPS_API_KEY
+    APP_API_BASE_URL: $APP_API_BASE_URL
+    APP_API_LEGACY_BASE_URL: $APP_API_LEGACY_BASE_URL
+    APP_WEB_VIEW_QUOTE_URL: $APP_WEB_VIEW_QUOTE_URL
+    APP_WEB_VIEW_URL: $APP_WEB_VIEW_URL
+  script:
+    - chmod +x gradlew
+    - ./gradlew build
+#  artifacts:
+#    name: "Gradle artifacts from $CI_PROJECT_NAME on $CI_COMMIT_REF_SLUG"
+#    paths:
+#      - "**/target"
+#    reports:
+#      # declare the JUnit reports (recursive pattern for multi-module projects)
+#      junit:
+#        - "**/target/*-reports/TEST-*.xml"
+
+deploy:
+  stage: deploy
+  script: echo "Define your deployment script!"
+  environment: production
